@@ -30,7 +30,8 @@ type FilterMode =
   | 'viterbi-abs-24'
   | 'viterbi-tri-64'
   | 'viterbi-tri-128'
-  | 'viterbi-tri-256';
+  | 'viterbi-tri-256'
+  | 'brute-grey';
 
 const FILTER_MODES: readonly FilterMode[] = [
   0,
@@ -2252,6 +2253,8 @@ function buildBlockMatchCache(
     const startPair = pairCount;
     const maxLen = rem < DEFLATE_MAX_MATCH ? rem : DEFLATE_MAX_MATCH;
 
+    let cachedH1 = -1;
+    let cachedH4 = -1;
     if (maxLen >= 3) {
       ensureCap(64);
       let bestLen = 0;
@@ -2303,9 +2306,12 @@ function buildBlockMatchCache(
         let targetEnd = bestLen >= 3 ? data[i + bestLen] : 0;
         let targetEnd1 = bestLen >= 3 ? data[i + bestLen - 1] : 0;
 
-        // 1) 3-byte hash chain (finds closest short matches and near long matches)
-        if (bestLen < si || si < 3) {
-          let pos = head1[hash3(data, i)];
+        // 1) 3-byte hash chain: when si < 4 && maxLen >= 4, head4 holds all 4+ byte matches,
+        // so head1 is only needed until the first length>=3 match is found.
+        const onlyNeed3 = si < 4 && maxLen >= 4;
+        if ((!onlyNeed3 && (bestLen < si || si < 3)) || (onlyNeed3 && bestLen < 3)) {
+          cachedH1 = hash3(data, i);
+          let pos = head1[cachedH1];
           let steps =
             bestLen >= 128 ? 12 : bestLen >= 80 ? (chainLimit3 < 32 ? chainLimit3 : 32) : chainLimit3;
           while (pos >= minPos && steps-- > 0) {
@@ -2335,6 +2341,7 @@ function buildBlockMatchCache(
                   if (bestLen === maxLen) break;
                   targetEnd = data[i + bestLen];
                   targetEnd1 = data[i + bestLen - 1];
+                  if (onlyNeed3) break;
                   if (bestLen >= 128 && steps > 12) steps = 12;
                   else if (bestLen >= 80 && steps > 32) steps = 32;
                   if (si >= 3 && bestLen >= si) break;
@@ -2383,12 +2390,35 @@ function buildBlockMatchCache(
         }
 
         // 2) 4-byte hash chain (reaches full 32KB window for 4+ byte matches with minimal collisions)
+        let injectedRow = false;
         if (bestLen < maxLen && maxLen >= 4 && si < 4 && i + 3 < n) {
           const b3 = data[i + 3];
-          let pos = head4[hash4(data, i)];
+          cachedH4 = hash4(data, i);
+          let pos = head4[cachedH4];
+          const rowPos =
+            sRow >= 3 && rowSize > 0 && rowSize <= DEFLATE_WINDOW_SIZE && i >= rowSize
+              ? i - rowSize
+              : -1;
           let steps =
             bestLen >= 128 ? 12 : bestLen >= 80 ? (chainLimit4 < 40 ? chainLimit4 : 40) : chainLimit4;
           while (pos >= minPos && steps-- > 0) {
+            if (!injectedRow && rowPos >= 0 && pos <= rowPos) {
+              injectedRow = true;
+              const rml = sRow < maxLen ? sRow : maxLen;
+              if (rml > bestLen) {
+                while (pairCount > startPair && dists[pairCount - 1] >= rowSize - 1) pairCount--;
+                ensureCap(1);
+                lens[pairCount] = rml - 3;
+                dists[pairCount] = rowSize - 1;
+                pairCount++;
+                bestLen = rml;
+                if (bestLen === maxLen) break;
+                targetEnd = data[i + bestLen];
+                targetEnd1 = data[i + bestLen - 1];
+                if (bestLen >= 128 && steps > 12) steps = 12;
+                else if (bestLen >= 80 && steps > 40) steps = 40;
+              }
+            }
             if (
               (bestLen < 4 || (data[pos + bestLen] === targetEnd && data[pos + bestLen - 1] === targetEnd1)) &&
               data[pos] === b0 &&
@@ -2457,7 +2487,7 @@ function buildBlockMatchCache(
 
         // 4) Direct PNG vertical scanline probes (r=1 via O(1) sameRow[], plus 2, 3, 4, 8 rows above)
         if (bestLen < maxLen && rowSize > 0) {
-          if (sRow >= 3 && rowSize <= DEFLATE_WINDOW_SIZE && i >= rowSize) {
+          if (!injectedRow && sRow >= 3 && rowSize <= DEFLATE_WINDOW_SIZE && i >= rowSize) {
             const rml = sRow < maxLen ? sRow : maxLen;
             if (rml > bestLen) {
               const d = rowSize;
@@ -2538,11 +2568,11 @@ function buildBlockMatchCache(
     // Insert position i into hash chains (unless deep inside a run)
     if (i + 2 < n && !(runBehind >= 4 && si >= 260)) {
       const slot = i & DEFLATE_WINDOW_MASK;
-      const h1 = hash3(data, i);
+      const h1 = cachedH1 >= 0 ? cachedH1 : hash3(data, i);
       prev1[slot] = head1[h1];
       head1[h1] = i;
       if (si < 4 && i + 3 < n) {
-        const h4 = hash4(data, i);
+        const h4 = cachedH4 >= 0 ? cachedH4 : hash4(data, i);
         prev4[slot] = head4[h4];
         head4[h4] = i;
       } else if (si >= 4 && si < 258 && i + si < n) {
@@ -3016,40 +3046,36 @@ export function zopfliDeflateZlib(
         improvedBest = true;
       }
 
-      const minGain = prevBest < Infinity ? Math.max(8, Math.floor(prevBest * 0.0001)) : 1;
+      const gainRatio = n <= 1_200_000 ? 0.00015 : 0.00025;
+      const minGain =
+        prevBest < Infinity
+          ? Math.max(n <= 1_200_000 ? 8 : 16, Math.floor(prevBest * gainRatio))
+          : 1;
       const sigImprove = prevBest - bestBits >= minGain;
-      if (it >= 2) {
+      if (it >= 1) {
         if (sigImprove) noImprove = 0;
         else noImprove++;
       }
 
       if (it + 1 < iterations) {
-        if (usedHuffmanLast && !improvedBest) break;
-        if (parsed.count <= 256 && usedHuffmanLast) break;
+        if (usedHuffmanLast) break;
 
         if (
-          (it + 2 === iterations || noImprove >= 2 || parsed.count <= 256) &&
-          bestParse !== null &&
-          !usedHuffmanLast
+          (it + 2 === iterations || noImprove >= 1 || parsed.count <= 256) &&
+          bestParse !== null
         ) {
-          updateHuffmanCosts(bestParse.llCounts, bestParse.dCounts, llCost, dCost);
-          usedHuffmanLast = true;
-        } else if (it + 2 === iterations && bestParse !== null) {
-          if (usedHuffmanLast && !improvedBest) break;
           updateHuffmanCosts(bestParse.llCounts, bestParse.dCounts, llCost, dCost);
           usedHuffmanLast = true;
         } else if (it === 0) {
           for (let s = 0; s < 286; s++) statLl[s] = parsed.llCounts[s];
           for (let d = 0; d < 30; d++) statD[d] = parsed.dCounts[d];
           updateEntropyCosts(statLl, statD, llCost, dCost);
-          usedHuffmanLast = false;
         } else {
-          const wNew = improvedBest ? 0.65 : 0.45;
+          const wNew = improvedBest ? 1.0 : 0.5;
           const wOld = 1.0 - wNew;
           for (let s = 0; s < 286; s++) statLl[s] = wOld * statLl[s] + wNew * parsed.llCounts[s];
           for (let d = 0; d < 30; d++) statD[d] = wOld * statD[d] + wNew * parsed.dCounts[d];
           updateEntropyCosts(statLl, statD, llCost, dCost);
-          usedHuffmanLast = false;
         }
       }
     }
@@ -3349,6 +3375,48 @@ function luminanceKey(c: number): number {
   return 299 * r + 587 * g + 114 * b;
 }
 
+function bruteFilterGrey(
+  samples: Uint8Array,
+  width: number,
+  height: number,
+  switchPenaltyBytes: number,
+): Uint8Array {
+  const stride = width;
+  const rs = stride + 1;
+  const raw = new Uint8Array(height * rs);
+  const trial = Array.from({ length: 5 }, (_, t) => {
+    const a = new Uint8Array(rs);
+    a[0] = t;
+    return a;
+  });
+  let prevF = -1;
+  for (let y = 0; y < height; y++) {
+    const at = y * rs;
+    const before = raw.subarray(at > 32768 ? at - 32768 : 0, at);
+    const cur = samples.subarray(y * stride, (y + 1) * stride);
+    const prev = y > 0 ? samples.subarray((y - 1) * stride, y * stride) : null;
+    let bestF = 0;
+    let bestCost = Infinity;
+    for (let f = 0; f < 5; f++) {
+      filterRow(f, cur, prev, 1, trial[f].subarray(1));
+      const c = deflateSync(
+        trial[f],
+        before.length > 0
+          ? { level: 4, memLevel: 8, dictionary: before }
+          : { level: 4, memLevel: 8 },
+      );
+      const cost = c.length + (prevF >= 0 && f !== prevF ? switchPenaltyBytes : 0);
+      if (cost < bestCost) {
+        bestCost = cost;
+        bestF = f;
+      }
+    }
+    raw.set(trial[bestF], at);
+    prevF = bestF;
+  }
+  return raw;
+}
+
 export function squeezePng(inputBytes: Uint8Array): { png: Uint8Array; label: string; width: number; height: number } {
   const decoded = decodePng(inputBytes);
   const { width, height, rgba } = decoded;
@@ -3430,7 +3498,18 @@ export function squeezePng(inputBytes: Uint8Array): { png: Uint8Array; label: st
   }
 
   // Candidate B: Indexed palette (color type 3) when unique RGBA colors <= 256
-  if (analysis.paletteMap !== null && analysis.paletteMap.size > 0 && analysis.paletteMap.size <= 256) {
+  // Skip palette on opaque/single-tRNS greyscale with >16 colors (1-bpp GREY has 0 PLTE overhead).
+  const skipPalForGrey =
+    analysis.allGrey &&
+    (analysis.allOpaque || analysis.canSingleTrnsGrey) &&
+    analysis.paletteMap !== null &&
+    analysis.paletteMap.size > 16;
+  if (
+    !skipPalForGrey &&
+    analysis.paletteMap !== null &&
+    analysis.paletteMap.size > 0 &&
+    analysis.paletteMap.size <= 256
+  ) {
     const entries = Array.from(analysis.paletteMap.entries()); // [rgbaUint32, freq]
     const transEntries = entries.filter(([c]) => (c & 0xff) < 255);
     const opaqueEntries = entries.filter(([c]) => (c & 0xff) === 255);
@@ -3467,8 +3546,10 @@ export function squeezePng(inputBytes: Uint8Array): { png: Uint8Array; label: st
     }
   }
 
-  // Stage 1: Screen all color forms and deduplicated filter plans at level 6
-  const screenedForms = forms.map((form) => screenColorForm(width, height, form, FILTER_MODES));
+  // Stage 1: Screen all color forms and deduplicated filter plans at level 3
+  const screenedForms = forms.map((form) =>
+    screenColorForm(width, height, form, form.labelPrefix === 'PAL-freq' ? [0, 1, 2] : FILTER_MODES),
+  );
   screenedForms.sort((a, b) => a.bestTotalBytes - b.bestTotalBytes);
   const bestScreenedBytes = screenedForms[0].bestTotalBytes;
 
@@ -3514,18 +3595,40 @@ export function squeezePng(inputBytes: Uint8Array): { png: Uint8Array; label: st
     }
   }
 
+  // Stage 2b: For high-entropy 1-bpp greyscale, also try hysteresis per-row zlib brute filter (~300ms)
+  if (bestForm.colorType === 0 && bestTotalBytes > 50_000) {
+    const bruteRaw = bruteFilterGrey(bestForm.samples, width, height, 3);
+    const overhead = extraChunksOverhead(bestForm.extraChunks);
+    for (const strategy of stage2Strategies) {
+      const compressed = deflateSync(bruteRaw, {
+        level: 6,
+        strategy,
+        memLevel: 8,
+        chunkSize: 64 * 1024,
+      });
+      const totalBytes = compressed.length + overhead;
+      if (totalBytes < bestTotalBytes) {
+        bestIdat = new Uint8Array(compressed.buffer, compressed.byteOffset, compressed.length);
+        bestTotalBytes = totalBytes;
+        bestMode = 'brute-grey';
+        bestStrategy = strategy;
+        bestFiltered = bruteRaw;
+      }
+    }
+  }
+
   // Stage 3: Pure-TS optimal DEFLATE on the single best candidate
   const refinedOverhead = extraChunksOverhead(bestForm.extraChunks);
   let deflateTag = `s=${bestStrategy},m=${bestMemLevel}`;
   const bestBpp = CHANNELS_BY_COLOR_TYPE[bestForm.colorType];
   const bestRowSize = width * bestBpp + 1;
   // Work-based deterministic budget scaled by filtered stream length:
-  // smaller (1-bpp PAL/GREY) streams run deeper optimal parsing for minimal wall time.
+  // smaller (1-bpp PAL/GREY) streams run deeper match chains; early-exit skips converged blocks.
   const streamLen = bestFiltered.length;
-  const zIters = streamLen <= 1_200_000 ? 6 : streamLen <= 3_000_000 ? 5 : 4;
-  const zMaxBlocks = streamLen <= 1_200_000 ? 26 : streamLen <= 3_000_000 ? 24 : 18;
-  const zChain3 = streamLen <= 1_200_000 ? 176 : streamLen <= 3_000_000 ? 80 : 56;
-  const zChain4 = streamLen <= 1_200_000 ? 352 : streamLen <= 3_000_000 ? 184 : 136;
+  const zIters = streamLen <= 1_200_000 ? 10 : streamLen <= 3_000_000 ? 16 : 12;
+  const zMaxBlocks = streamLen <= 1_200_000 ? 26 : streamLen <= 3_000_000 ? 28 : 22;
+  const zChain3 = streamLen <= 1_200_000 ? 96 : streamLen <= 3_000_000 ? 56 : 40;
+  const zChain4 = streamLen <= 1_200_000 ? 320 : streamLen <= 3_000_000 ? 176 : 136;
   const zopfliIdat = zopfliDeflateZlib(
     bestFiltered,
     zIters,
