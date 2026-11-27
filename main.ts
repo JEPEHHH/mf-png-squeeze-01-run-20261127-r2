@@ -1122,7 +1122,7 @@ function computeCodeLengths(
 
 // Zopfli's OptimizeHuffmanForRle: smooth small frequency variations so adjacent
 // symbols share code lengths and RLE-compress into a smaller dynamic header.
-function optimizeHuffmanForRle(counts: Uint32Array, length: number, out: Uint32Array): void {
+function optimizeHuffmanForRle(counts: Uint32Array, length: number, out: Uint32Array, diffLimit = 4): void {
   let n = length;
   while (n > 0 && counts[n - 1] === 0) n--;
   out.set(counts.subarray(0, length));
@@ -1151,7 +1151,7 @@ function optimizeHuffmanForRle(counts: Uint32Array, length: number, out: Uint32A
       i === n ||
       goodForRle[i] !== 0 ||
       (i > 0 && goodForRle[i - 1] !== 0) ||
-      Math.abs(out[i] - limit) >= 4
+      Math.abs(out[i] - limit) >= diffLimit
     ) {
       if (stride >= 4 || (stride >= 3 && sum === 0)) {
         let count = Math.floor((sum + stride / 2) / stride);
@@ -1402,25 +1402,38 @@ function computeDynamicTreeBitsFast(
   return r.headerBits + dataA;
 }
 
+const rleDpClCost = new Float64Array(19);
+const rleDpCost = new Float64Array(317);
+const rleDpPrevPos = new Int16Array(317);
+const rleDpPrevSym = new Uint8Array(317);
+const rleDpPrevExt = new Uint8Array(317);
+const rleDpCurClLen = new Uint8Array(19);
+const rleDpNextClCounts = new Uint32Array(19);
+const rleDpNextClLen = new Uint8Array(19);
+
 function encodeRleDp(
   llLengths: Uint8Array,
   hlit: number,
   dLengths: Uint8Array,
   hdist: number,
   initClLen: Uint8Array,
+  allow16 = true,
+  allow17 = true,
+  allow18 = true,
 ): { headerBits: number; hclen: number; rleCount: number; clLen: Uint8Array; syms: Uint8Array; extras: Uint8Array } {
   const total = hlit + hdist;
   rleCombinedScratch.set(llLengths.subarray(0, hlit), 0);
   rleCombinedScratch.set(dLengths.subarray(0, hdist), hlit);
 
-  const clCost = new Float64Array(19);
-  const dp = new Float64Array(total + 1);
-  const prevPos = new Int16Array(total + 1);
-  const prevSym = new Uint8Array(total + 1);
-  const prevExt = new Uint8Array(total + 1);
-  const curClLen = new Uint8Array(initClLen);
-  const nextClCounts = new Uint32Array(19);
-  const nextClLen = new Uint8Array(19);
+  const clCost = rleDpClCost;
+  const dp = rleDpCost;
+  const prevPos = rleDpPrevPos;
+  const prevSym = rleDpPrevSym;
+  const prevExt = rleDpPrevExt;
+  const curClLen = rleDpCurClLen;
+  curClLen.set(initClLen);
+  const nextClCounts = rleDpNextClCounts;
+  const nextClLen = rleDpNextClLen;
 
   let bestHeaderBits = Infinity;
   let bestHclen = 4;
@@ -1429,7 +1442,7 @@ function encodeRleDp(
   let bestSyms = new Uint8Array(0);
   let bestExtras = new Uint8Array(0);
 
-  for (let pass = 0; pass < 2; pass++) {
+  for (let pass = 0; pass < 4; pass++) {
     for (let s = 0; s < 19; s++) {
       clCost[s] = curClLen[s] > 0 ? curClLen[s] : 8.5;
     }
@@ -1447,7 +1460,7 @@ function encodeRleDp(
         prevExt[i + 1] = 0;
       }
 
-      if (i > 0) {
+      if (allow16 && i > 0) {
         const pv = rleCombinedScratch[i - 1];
         const c16 = base + clCost[16] + 2;
         const maxK = total - i < 6 ? total - i : 6;
@@ -1462,21 +1475,23 @@ function encodeRleDp(
         }
       }
 
-      if (v === 0) {
+      if (v === 0 && (allow17 || allow18)) {
         let zRun = 1;
         const maxZ = total - i < 138 ? total - i : 138;
         while (zRun < maxZ && rleCombinedScratch[i + zRun] === 0) zRun++;
-        const c17 = base + clCost[17] + 3;
-        const lim17 = zRun < 10 ? zRun : 10;
-        for (let k = 3; k <= lim17; k++) {
-          if (c17 < dp[i + k]) {
-            dp[i + k] = c17;
-            prevPos[i + k] = i;
-            prevSym[i + k] = 17;
-            prevExt[i + k] = k - 3;
+        if (allow17) {
+          const c17 = base + clCost[17] + 3;
+          const lim17 = zRun < 10 ? zRun : 10;
+          for (let k = 3; k <= lim17; k++) {
+            if (c17 < dp[i + k]) {
+              dp[i + k] = c17;
+              prevPos[i + k] = i;
+              prevSym[i + k] = 17;
+              prevExt[i + k] = k - 3;
+            }
           }
         }
-        if (zRun >= 11) {
+        if (allow18 && zRun >= 11) {
           const c18 = base + clCost[18] + 7;
           for (let k = 11; k <= zRun; k++) {
             if (c18 < dp[i + k]) {
@@ -1543,6 +1558,14 @@ function encodeRleDp(
       bestSyms = syms;
       bestExtras = extras;
     }
+    let same = true;
+    for (let s = 0; s < 19; s++) {
+      if (curClLen[s] !== nextClLen[s]) {
+        same = false;
+        break;
+      }
+    }
+    if (same) break;
     curClLen.set(nextClLen);
   }
 
@@ -1556,93 +1579,147 @@ function encodeRleDp(
   };
 }
 
+const llLenC = new Uint8Array(286);
+const dLenC = new Uint8Array(30);
+const llLenD = new Uint8Array(286);
+const dLenD = new Uint8Array(30);
+
+function sameBytes(a: Uint8Array, b: Uint8Array, len: number): boolean {
+  for (let i = 0; i < len; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 function buildBestDynamicTreePlan(
   llCounts: Uint32Array,
   dCounts: Uint32Array,
 ): DynamicTreePlan {
   computeCodeLengths(llCounts, 286, 15, llLenA);
   computeCodeLengths(dCounts, 30, 15, dLenA);
-  optimizeHuffmanForRle(llCounts, 286, optLlCounts);
-  optimizeHuffmanForRle(dCounts, 30, optDCounts);
+  optimizeHuffmanForRle(llCounts, 286, optLlCounts, 4);
+  optimizeHuffmanForRle(dCounts, 30, optDCounts, 4);
   for (let s = 0; s < 286; s++) if (llCounts[s] > 0 && optLlCounts[s] === 0) optLlCounts[s] = 1;
   for (let d = 0; d < 30; d++) if (dCounts[d] > 0 && optDCounts[d] === 0) optDCounts[d] = 1;
   computeCodeLengths(optLlCounts, 286, 15, llLenB);
   computeCodeLengths(optDCounts, 30, 15, dLenB);
 
+  optimizeHuffmanForRle(llCounts, 286, optLlCounts, 8);
+  optimizeHuffmanForRle(dCounts, 30, optDCounts, 8);
+  for (let s = 0; s < 286; s++) if (llCounts[s] > 0 && optLlCounts[s] === 0) optLlCounts[s] = 1;
+  for (let d = 0; d < 30; d++) if (dCounts[d] > 0 && optDCounts[d] === 0) optDCounts[d] = 1;
+  computeCodeLengths(optLlCounts, 286, 15, llLenC);
+  computeCodeLengths(optDCounts, 30, 15, dLenC);
+
+  optimizeHuffmanForRle(llCounts, 286, optLlCounts, 2);
+  optimizeHuffmanForRle(dCounts, 30, optDCounts, 2);
+  for (let s = 0; s < 286; s++) if (llCounts[s] > 0 && optLlCounts[s] === 0) optLlCounts[s] = 1;
+  for (let d = 0; d < 30; d++) if (dCounts[d] > 0 && optDCounts[d] === 0) optDCounts[d] = 1;
+  computeCodeLengths(optLlCounts, 286, 15, llLenD);
+  computeCodeLengths(optDCounts, 30, 15, dLenD);
+
+  const uniqLl: Uint8Array[] = [llLenA];
+  for (const arr of [llLenB, llLenC, llLenD]) {
+    if (!uniqLl.some((u) => sameBytes(u, arr, 286))) uniqLl.push(arr);
+  }
+  const uniqD: Uint8Array[] = [dLenA];
+  for (const arr of [dLenB, dLenC, dLenD]) {
+    if (!uniqD.some((u) => sameBytes(u, arr, 30))) uniqD.push(arr);
+  }
+
   let bestPlan: DynamicTreePlan | null = null;
+  let bestPairDataBits = 0;
 
-  const candidates: [Uint8Array, Uint8Array][] = [
-    [llLenA, dLenA],
-    [llLenB, dLenA],
-    [llLenA, dLenB],
-    [llLenB, dLenB],
-  ];
-
-  for (const [llL, dL] of candidates) {
+  for (const llL of uniqLl) {
     let hlit = 286;
     while (hlit > 257 && llL[hlit - 1] === 0) hlit--;
-    let hdist = 30;
-    while (hdist > 1 && dL[hdist - 1] === 0) hdist--;
-    const dataBits = computeDataBits(llCounts, dCounts, llL, dL);
+    for (const dL of uniqD) {
+      let hdist = 30;
+      while (hdist > 1 && dL[hdist - 1] === 0) hdist--;
+      const dataBits = computeDataBits(llCounts, dCounts, llL, dL);
 
-    let bestCandHeader = Infinity;
-    let bestCandMask = 3;
-    const bestInitCl = new Uint8Array(19);
+      let bestCandHeader = Infinity;
+      let bestCandMask = 3;
+      const bestInitCl = new Uint8Array(19);
 
-    for (let mask = 0; mask < 4; mask++) {
-      const r = encodeRleCandidate(llL, hlit, dL, hdist, (mask & 1) !== 0, (mask & 2) !== 0);
-      if (r.headerBits < bestCandHeader) {
-        bestCandHeader = r.headerBits;
-        bestCandMask = mask;
-        bestInitCl.set(clLenScratch);
+      for (let mask = 0; mask < 4; mask++) {
+        const r = encodeRleCandidate(llL, hlit, dL, hdist, (mask & 1) !== 0, (mask & 2) !== 0);
+        if (r.headerBits < bestCandHeader) {
+          bestCandHeader = r.headerBits;
+          bestCandMask = mask;
+          bestInitCl.set(clLenScratch);
+        }
       }
-    }
 
-    const rHeur = encodeRleCandidate(
-      llL,
-      hlit,
-      dL,
-      hdist,
-      (bestCandMask & 1) !== 0,
-      (bestCandMask & 2) !== 0,
-    );
-    const heurTotal = rHeur.headerBits + dataBits;
-    if (bestPlan === null || heurTotal < bestPlan.totalBits) {
-      bestPlan = {
+      const rHeur = encodeRleCandidate(
+        llL,
         hlit,
+        dL,
         hdist,
-        hclen: rHeur.hclen,
-        llLengths: new Uint8Array(llL),
-        dLengths: new Uint8Array(dL),
-        clLengths: new Uint8Array(clLenScratch),
-        rleSyms: rleSymsScratch.slice(0, rHeur.rleCount),
-        rleExtras: rleExtrasScratch.slice(0, rHeur.rleCount),
-        rleCount: rHeur.rleCount,
-        headerBits: rHeur.headerBits,
-        totalBits: heurTotal,
-      };
-    }
+        (bestCandMask & 1) !== 0,
+        (bestCandMask & 2) !== 0,
+      );
+      const heurTotal = rHeur.headerBits + dataBits;
+      if (bestPlan === null || heurTotal < bestPlan.totalBits) {
+        bestPlan = {
+          hlit,
+          hdist,
+          hclen: rHeur.hclen,
+          llLengths: new Uint8Array(llL),
+          dLengths: new Uint8Array(dL),
+          clLengths: new Uint8Array(clLenScratch),
+          rleSyms: rleSymsScratch.slice(0, rHeur.rleCount),
+          rleExtras: rleExtrasScratch.slice(0, rHeur.rleCount),
+          rleCount: rHeur.rleCount,
+          headerBits: rHeur.headerBits,
+          totalBits: heurTotal,
+        };
+        bestPairDataBits = dataBits;
+      }
 
-    const rDp = encodeRleDp(llL, hlit, dL, hdist, bestInitCl);
-    const dpTotal = rDp.headerBits + dataBits;
-    if (dpTotal < bestPlan.totalBits) {
-      bestPlan = {
-        hlit,
-        hdist,
-        hclen: rDp.hclen,
-        llLengths: new Uint8Array(llL),
-        dLengths: new Uint8Array(dL),
-        clLengths: rDp.clLen,
-        rleSyms: rDp.syms,
-        rleExtras: rDp.extras,
-        rleCount: rDp.rleCount,
-        headerBits: rDp.headerBits,
-        totalBits: dpTotal,
-      };
+      const rDp = encodeRleDp(llL, hlit, dL, hdist, bestInitCl, true, true, true);
+      const dpTotal = rDp.headerBits + dataBits;
+      if (dpTotal < bestPlan.totalBits) {
+        bestPlan = {
+          hlit,
+          hdist,
+          hclen: rDp.hclen,
+          llLengths: new Uint8Array(llL),
+          dLengths: new Uint8Array(dL),
+          clLengths: rDp.clLen,
+          rleSyms: rDp.syms,
+          rleExtras: rDp.extras,
+          rleCount: rDp.rleCount,
+          headerBits: rDp.headerBits,
+          totalBits: dpTotal,
+        };
+        bestPairDataBits = dataBits;
+      }
     }
   }
 
-  return bestPlan as DynamicTreePlan;
+  const bp = bestPlan as DynamicTreePlan;
+  const rleModes: [boolean, boolean, boolean][] = [
+    [true, true, false],
+    [false, true, true],
+    [true, false, true],
+  ];
+  for (const [a16, a17, a18] of rleModes) {
+    if (!a16 && bp.clLengths[16] === 0) continue;
+    if (!a17 && bp.clLengths[17] === 0) continue;
+    if (!a18 && bp.clLengths[18] === 0) continue;
+    const rAbl = encodeRleDp(bp.llLengths, bp.hlit, bp.dLengths, bp.hdist, bp.clLengths, a16, a17, a18);
+    const ablTotal = rAbl.headerBits + bestPairDataBits;
+    if (ablTotal < bp.totalBits) {
+      bp.hclen = rAbl.hclen;
+      bp.clLengths = rAbl.clLen;
+      bp.rleSyms = rAbl.syms;
+      bp.rleExtras = rAbl.extras;
+      bp.rleCount = rAbl.rleCount;
+      bp.headerBits = rAbl.headerBits;
+      bp.totalBits = ablTotal;
+    }
+  }
+
+  return bp;
 }
 
 function computeSameArray(data: Uint8Array): Int32Array {
@@ -2460,7 +2537,7 @@ function buildBlockMatchCache(
               same[pos] === si &&
               data[pos] === b0 &&
               data[pos + si] === nb &&
-              data[pos + bestLen] === targetEnd
+              (bestLen < 3 || data[pos + bestLen] === targetEnd)
             ) {
               let ml = si + 1;
               while (ml < maxLen && data[pos + ml] === data[i + ml]) ml++;
@@ -3208,7 +3285,7 @@ export function zopfliDeflateZlib(
       let bestM = curM;
       let bestPairFast = Infinity;
 
-      for (let round = 0; round < 4; round++) {
+      for (let round = 0; round < 5; round++) {
         if (hi - lo < 16) break;
         cPts[0] = lo;
         for (let k = 1; k <= NP; k++) {
