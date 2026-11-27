@@ -9,9 +9,9 @@ import {
 
 const SIG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const BPP: Record<number, number> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
-const STRATS = [zc.Z_DEFAULT_STRATEGY, zc.Z_FILTERED, zc.Z_HUFFMAN_ONLY, zc.Z_RLE, zc.Z_FIXED];
+const STRATS = [zc.Z_DEFAULT_STRATEGY, zc.Z_FILTERED];
 type Heuristic = 0 | 1 | 2 | 3 | 4 | 'sum' | 'distinct' | 'entropy';
-const HEURISTICS: Heuristic[] = [0, 1, 2, 3, 4, 'sum', 'distinct', 'entropy'];
+const HEURISTICS: Heuristic[] = [0, 4, 'sum'];
 
 const CRCT = (() => {
   const t = new Uint32Array(256);
@@ -235,10 +235,9 @@ function bestPack(w: number, h: number, color: number, rows: Uint8Array, extra: 
       if (!champion || z.length < champion.length) {
         champion = z; chosen = `h=${f.mode} s=${s} m=8`;
       }
-      if (shortlist.length < 3 || z.length < shortlist[2].n) {
+      if (shortlist.length < 1 || z.length < shortlist[0].n) {
+        shortlist.length = 0;
         shortlist.push({ bytes: f.bytes, mode: f.mode, strat: s, n: z.length });
-        shortlist.sort((a, b) => a.n - b.n);
-        if (shortlist.length > 3) shortlist.pop();
       }
     }
   }
