@@ -138,6 +138,8 @@ function be16(b: Uint8Array, o: number): number { return (b[o] << 8) | b[o + 1];
 
 const SEEN = new Uint8Array(256);
 const HIST = new Uint32Array(256);
+const NEG_LOG = new Float64Array(8192);
+for (let k = 1; k < NEG_LOG.length; k++) NEG_LOG[k] = k * Math.log2(k);
 
 // Scanlines are prepared once per colour model; each heuristic picks a filter per row.
 function filterPass(rows: Uint8Array, w: number, h: number, bpp: number, mode: Heuristic): Uint8Array {
@@ -168,7 +170,10 @@ function filterPass(rows: Uint8Array, w: number, h: number, bpp: number, mode: H
         HIST.fill(0);
         for (let i = 0; i < stride; i++) HIST[tryBuf![i]]++;
         score = 0;
-        for (let i = 0; i < 256; i++) if (HIST[i]) score += HIST[i] * Math.log2(HIST[i]);
+        for (let i = 0; i < 256; i++) {
+          const count = HIST[i];
+          if (count) score += count < NEG_LOG.length ? NEG_LOG[count] : count * Math.log2(count);
+        }
       }
       if (score < bestScore) { bestScore = score; best = t; }
     }
