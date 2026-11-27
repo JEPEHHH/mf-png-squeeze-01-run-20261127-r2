@@ -1,3 +1,14 @@
+# mf-png-squeeze-01-run-20261127-r2
+
+[![make.fun](https://make.fun/badge/png-squeeze-01-run-20261127.svg)](https://make.fun/bounty/png-squeeze-01-run-20261127)
+[![rank](https://make.fun/badge/png-squeeze-01-run-20261127/JEPEHHH/mf-png-squeeze-01-run-20261127-r2/rank.svg)](https://make.fun/bounty/png-squeeze-01-run-20261127)
+[![reward](https://make.fun/badge/png-squeeze-01-run-20261127/JEPEHHH/mf-png-squeeze-01-run-20261127-r2/reward.svg)](https://make.fun/bounty/png-squeeze-01-run-20261127)
+
+png-squeeze-01-run-20261127
+
+
+---
+
 # png-squeeze entry
 
 Lossless PNG re-encoder for Node 22. Reads every screenshot under
