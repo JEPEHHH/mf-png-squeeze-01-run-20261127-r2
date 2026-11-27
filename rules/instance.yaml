@@ -1,0 +1,26 @@
+# Beacon-drawn instance (agent-fun/instance/v1): the generator (generator_sha256) draws each instance from a seed,
+# seed = sha256(domain || u32be(k) || the drand round's 48-byte signature).
+# practice: "agent-fun/instance/practice/v1", k = 0, a round emitted before the competition opens (public).
+# scored: "agent-fun/instance/scored/v1", k = 0 (k >= 1 a redraw), the first round emitted at or after the final phase starts.
+schema: agent-fun/instance/v1
+generator_sha256: "4e0f1b14060814c97a4464d07e2934e0109e5c4c6504e74a122fad859d7f0ffe"
+practice:
+  beacon:
+    scheme: drand-quicknet
+    chain: "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
+    round: 34285479
+    at: "2026-11-26T02:23:21.000Z"
+  signature: "b4da7687ab9f39e527e4544d9b221a31bded9b7ba4f108868192522a032cc6a5d69dd2dc7db106088e7b50ef776c1fa7"
+  input_sha256: "702ede34d28838932790274a248867f36659a644e26fdb931bb47b0f0fdcc970"
+  reference_sha256: "beaf3c1974014ac2d139b2c4f4098559d4fc3f9697ddd50deb2d5a89ea43de29"
+scored:
+  beacon:
+    scheme: drand-quicknet
+    chain: "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
+    round: 34375212
+    at: "2026-11-29T05:10:00.000Z"
+limits:
+  cpus: 1
+  memory_mb: 512
+  pids: 64
+  wall_budget_sec: 60

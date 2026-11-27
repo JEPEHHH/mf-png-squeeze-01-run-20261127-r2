@@ -1,0 +1,238 @@
+{
+  "format": "agent-fun/kit/v1",
+  "competition": "png-squeeze-01-run-20261127",
+  "phase": "dev",
+  "bundle_sha256": "5507dc129cb24eea63a3e558475ae97b02761d04f9b9d56d45710af28518e833",
+  "dataset_sha256": null,
+  "harness_version": "harness@2ded2f9e2884385a700132f1b7010c4c9070dd35930161ccf86b4bb1e96df813 node v26.13.1",
+  "scorer_version": "scorer@e649c17ebad662fccdd8ce9e5fcd838ed4433324440a2314bafb8456a941784d program@41dc6aaae5b174e001273b2fad6f2735efb85235654ed9bf3b77a562b996a56d",
+  "pricing_rev": "34d1007cd9dd19a1d751a8b87e79e95c181a94b3e791b1a546de6dac11435dbe",
+  "protocol": "agent-fun/program/v1",
+  "files": [
+    {
+      "path": "RULES.txt",
+      "sha256": "09f30f6a0362ab6b7aa152346c8be819f6ec665c5dce01838e66f67293e28f52",
+      "size": 62553
+    },
+    {
+      "path": "baselines/fixed-paeth/LICENSE",
+      "sha256": "e3b276fea38dd0896be15e76449046e9f6730ba2299f3149f478aa156d5c5cc4",
+      "size": 1065
+    },
+    {
+      "path": "baselines/fixed-paeth/NOTICE",
+      "sha256": "374e018a30ee504a51aa8fc266f7c93f259f53b12143650b62c19dc18e0e1936",
+      "size": 1801
+    },
+    {
+      "path": "baselines/fixed-paeth/main.ts",
+      "sha256": "50fcce3f7fc58964f6d25c886247526b5e1b1b37c7b3cf9f444ad1db5b8caaac",
+      "size": 966
+    },
+    {
+      "path": "baselines/fixed-paeth/pack.mjs",
+      "sha256": "f09604e6502973cbd25dc49496bbd327a2c322c9c8585d5b37d511b75b4d803b",
+      "size": 2448
+    },
+    {
+      "path": "baselines/fixed-paeth/png.mjs",
+      "sha256": "4a05462959035f12f41ce391deabc4da0856651e907dce8a14176eb48c7e238e",
+      "size": 15650
+    },
+    {
+      "path": "cli/makefun.mjs",
+      "sha256": "8ed03ac8c4480a634096a89812964013223a26ebb210a56c3b4ec9ebb2cd7bff",
+      "size": 44970534
+    },
+    {
+      "path": "cli/site.json",
+      "sha256": "24c5afb0763ff96dd092a88869fee664366b444f1147e57527cc5fc1b54ab124",
+      "size": 35
+    },
+    {
+      "path": "competition.yaml",
+      "sha256": "9bbdbd706c352782c1b700b0c177e0086cee3c51f6f027bbf5662e1fd8a4adf0",
+      "size": 24030
+    },
+    {
+      "path": "harness/CODE.sha256",
+      "sha256": "359185fd60c17da86cdba3aae32bfa35226757a59a86452066dbe43549273ed4",
+      "size": 21322
+    },
+    {
+      "path": "harness/SOURCES.sha256",
+      "sha256": "aedb8a2c1fe47bb68d47e52c6c73e6604459739875d9515380df4f70764c35dc",
+      "size": 21322
+    },
+    {
+      "path": "harness/harness-src.tar.gz",
+      "sha256": "e6890ee0ce36a074a98a858b91d4a09ba78682190ee2072dc443c4b80a7551ce",
+      "size": 3261849
+    },
+    {
+      "path": "harness/harness-src.tar.gz.sha256",
+      "sha256": "31787ef66402f39b14ea3995628d8085f024352c660fc37e75ce0a90462bfd20",
+      "size": 85
+    },
+    {
+      "path": "practice/input/i001/image.png",
+      "sha256": "0aeb62513dc4b9486593612a10dcfab1fd9e3a975e0e5260b83eafa6291195ac",
+      "size": 3687468
+    },
+    {
+      "path": "practice/input/i002/image.png",
+      "sha256": "ff8d80f4c45e53e30b82734247530aea8b83e7c409caa01726d79ad9f115f94e",
+      "size": 3687468
+    },
+    {
+      "path": "practice/input/i003/image.png",
+      "sha256": "a5364c8e044e4a2e686d6b75e9b38cedbdfc0a0f2696818ff8c74bbe9eaf5f90",
+      "size": 3687468
+    },
+    {
+      "path": "practice/input/i004/image.png",
+      "sha256": "1157e05bd3b2a70ce07333ffd16278a0b9c3c1c66a157f2a054e148c6504c165",
+      "size": 3687468
+    },
+    {
+      "path": "practice/input/i005/image.png",
+      "sha256": "cb6e55b63675af8d52d1c82d3adc81207ab424502b85fb2d2ba2a7ae88307ae2",
+      "size": 3687468
+    },
+    {
+      "path": "practice/input/i006/image.png",
+      "sha256": "ac9a0187256a60f4eb802deb588f75176a1219d1ec07f4c50b3f6f7379e5e68a",
+      "size": 3687468
+    },
+    {
+      "path": "practice/input/i007/image.png",
+      "sha256": "c982d2073bfc0fd3eaeb0a45645da3784d76856f182ac025a78fbd4ecc962cce",
+      "size": 3687468
+    },
+    {
+      "path": "practice/input/i008/image.png",
+      "sha256": "5b9dd834f581b5c09498c7c675476895fff8d4de7ea4cceb0e6e27cd9d6302ab",
+      "size": 3687468
+    },
+    {
+      "path": "practice/reference/i001/image.png",
+      "sha256": "0aeb62513dc4b9486593612a10dcfab1fd9e3a975e0e5260b83eafa6291195ac",
+      "size": 3687468
+    },
+    {
+      "path": "practice/reference/i002/image.png",
+      "sha256": "ff8d80f4c45e53e30b82734247530aea8b83e7c409caa01726d79ad9f115f94e",
+      "size": 3687468
+    },
+    {
+      "path": "practice/reference/i003/image.png",
+      "sha256": "a5364c8e044e4a2e686d6b75e9b38cedbdfc0a0f2696818ff8c74bbe9eaf5f90",
+      "size": 3687468
+    },
+    {
+      "path": "practice/reference/i004/image.png",
+      "sha256": "1157e05bd3b2a70ce07333ffd16278a0b9c3c1c66a157f2a054e148c6504c165",
+      "size": 3687468
+    },
+    {
+      "path": "practice/reference/i005/image.png",
+      "sha256": "cb6e55b63675af8d52d1c82d3adc81207ab424502b85fb2d2ba2a7ae88307ae2",
+      "size": 3687468
+    },
+    {
+      "path": "practice/reference/i006/image.png",
+      "sha256": "ac9a0187256a60f4eb802deb588f75176a1219d1ec07f4c50b3f6f7379e5e68a",
+      "size": 3687468
+    },
+    {
+      "path": "practice/reference/i007/image.png",
+      "sha256": "c982d2073bfc0fd3eaeb0a45645da3784d76856f182ac025a78fbd4ecc962cce",
+      "size": 3687468
+    },
+    {
+      "path": "practice/reference/i008/image.png",
+      "sha256": "5b9dd834f581b5c09498c7c675476895fff8d4de7ea4cceb0e6e27cd9d6302ab",
+      "size": 3687468
+    },
+    {
+      "path": "practice/reference/manifest.json",
+      "sha256": "54a99f1b0f333c2f1ecc899b052b38ead7d04d4b803d6d73b5dfa3e6984cfa2c",
+      "size": 2219
+    },
+    {
+      "path": "program/generator/draw.ts",
+      "sha256": "45eddb1b17dcd4d19c0bca7e8dcc2a001c4eab676835280f2ee11695a407d1f9",
+      "size": 4732
+    },
+    {
+      "path": "program/generator/package.json",
+      "sha256": "3ca9d4afd21425087cf31893b8f9f63c81b0b8408db5e343ca76e5f8aa26ab9a",
+      "size": 23
+    },
+    {
+      "path": "program/generator/rng.ts",
+      "sha256": "356d9fa98661b2c30cd62627208a408723cce21bf19d0a9a7a72df7ef8df75e3",
+      "size": 3146
+    },
+    {
+      "path": "program/generator/subject/font8x8.mjs",
+      "sha256": "878475c763f873d51f73aff905433dcac4093dd62ca1a813783dbeb64f79d1bc",
+      "size": 6318
+    },
+    {
+      "path": "program/generator/subject/generate.mjs",
+      "sha256": "d46c99b7eb563c344cecf23e52e6b6f3b958f567f7a2b262849522806770b995",
+      "size": 2278
+    },
+    {
+      "path": "program/generator/subject/png.mjs",
+      "sha256": "4a05462959035f12f41ce391deabc4da0856651e907dce8a14176eb48c7e238e",
+      "size": 15650
+    },
+    {
+      "path": "program/generator/subject/scale.mjs",
+      "sha256": "1b07c7c885e3e7dd12a6f80975db52c6fff63ae6965011b0a9b4fdf203e529f0",
+      "size": 12380
+    },
+    {
+      "path": "program/generator/subject/screen.mjs",
+      "sha256": "4e08e4abf878f9012d5fcf23543fde4d9386c511f4325622a4cf2e8bce4a6a87",
+      "size": 27569
+    },
+    {
+      "path": "program/scorer/checker/check.mjs",
+      "sha256": "2b3f4093a080e00fd4848b6ec58b354ceec364ad2bc9bf1ff5d424097269e600",
+      "size": 2646
+    },
+    {
+      "path": "program/scorer/checker/png.mjs",
+      "sha256": "4a05462959035f12f41ce391deabc4da0856651e907dce8a14176eb48c7e238e",
+      "size": 15650
+    },
+    {
+      "path": "program/scorer/package.json",
+      "sha256": "3ca9d4afd21425087cf31893b8f9f63c81b0b8408db5e343ca76e5f8aa26ab9a",
+      "size": 23
+    },
+    {
+      "path": "program/scorer/score.ts",
+      "sha256": "18e51c032463298f7b38c28ebc3bb4d2d380eadf38ebdbd5edbd0f39b36d4ae5",
+      "size": 8145
+    },
+    {
+      "path": "rules/instance.yaml",
+      "sha256": "16726eba5d5ebc1f5d4006679189b977272a9f3e8e7d7a36a937a3abeb4fc73b",
+      "size": 1249
+    },
+    {
+      "path": "starter/LICENSE",
+      "sha256": "e3b276fea38dd0896be15e76449046e9f6730ba2299f3149f478aa156d5c5cc4",
+      "size": 1065
+    },
+    {
+      "path": "starter/main.ts",
+      "sha256": "64c808996bfaab143720ab75b6d4912e9acd1b54a2a38b5bccde95d7ddac789b",
+      "size": 898
+    }
+  ]
+}
